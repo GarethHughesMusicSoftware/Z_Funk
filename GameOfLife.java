@@ -1,3 +1,5 @@
+package version_016;
+
 /**
 	Author of this Application: Dr Gareth Olubunmi Hughes (14 February 2017 - Present)
 	Copyright (c) : Dr Gareth Olubunmi Hughes (14 February 2017 - Present)
@@ -8,19 +10,24 @@
 	An application to implement the rules of Conway's Game of Life
 */
 
+import java.io.File;
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.EOFException;
+import java.io.UnsupportedEncodingException;
+import java.io.FileNotFoundException;
+
 import java.awt.Font;
 import java.awt.Color;
-import java.awt.Graphics;
-import java.awt.Graphics2D;
 import java.awt.Point;
 import java.awt.Dimension;
-import java.awt.Rectangle;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.GridBagLayout;
 import java.awt.GridBagConstraints;
 import java.awt.Insets;
-import java.awt.GraphicsEnvironment;
 import java.awt.event.ActionListener;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
@@ -28,6 +35,12 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.event.MouseListener;
 import java.awt.event.MouseEvent;
+import java.awt.Desktop;
+
+//import java.awt.Rectangle;
+//import java.awt.Graphics;
+//import java.awt.Graphics2D;
+//import java.awt.GraphicsEnvironment;
 
 import javax.swing.SwingUtilities;
 import javax.swing.JFrame;
@@ -42,14 +55,20 @@ import javax.swing.JButton;
 import javax.swing.JTextField;
 import javax.swing.JTextArea;
 import javax.swing.JScrollPane;
-import javax.swing.JScrollBar;
-import javax.swing.text.JTextComponent;
 import javax.swing.KeyStroke;
 import javax.swing.BorderFactory;
+import javax.swing.JFileChooser;
+
+//import javax.swing.JScrollBar;
+//import javax.swing.text.JTextComponent;
 
 
 public class GameOfLife extends JFrame implements MouseListener
 {
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = 1L;
 	// Instance Variables:
 	public boolean gameStarted = false;
 	public boolean play        = false;
@@ -59,7 +78,7 @@ public class GameOfLife extends JFrame implements MouseListener
 	public boolean[][] gridFlag      = new boolean[10][10];
 	public boolean[][] gridBuffer    = new boolean[10][10];
 	public boolean[][] startGridFlag = new boolean[10][10];
-
+	
 	public int backwardsBufferSize = 64;
 	// 3D array buffer to allow the cells to evolve backwards by up to 64 steps...
 	public boolean[][][] backwardsBuffer = new boolean[backwardsBufferSize][10][10];
@@ -68,8 +87,12 @@ public class GameOfLife extends JFrame implements MouseListener
 
 	public int cellCount = 0;
 	public double stepTime = 0.5;
-
+	
 	// Instance Objects:
+	public File userDir  = new File( System.getProperty("user.dir") + "/presets.dir/user.dir" );
+	public File helpFile = new File(
+			System.getProperty("user.dir") + "/help.dir/GameOfLife_UserGuide.pdf"
+	);
 	public static Font  font2_mono_b = new Font("Monospaced",Font.BOLD, 14);
 	public static Font  font2_b      = new Font("TimesRoman",Font.BOLD, 14);
 	public static Font  font3_mono_b = new Font("Monospaced",Font.BOLD, 17);
@@ -80,17 +103,22 @@ public class GameOfLife extends JFrame implements MouseListener
 	public static Color darkOrange   = new Color(255,110,0      );
 	public static Color purple       = new Color(190,0  ,255    );
 	public static Color brightGreen  = new Color(0  ,255,0  ,127);
-	private GraphicsEnvironment env;
-	private Rectangle bounds;
+	//private GraphicsEnvironment env;
+	//private Rectangle bounds;
+	
+	// Object Pointers:
+	public ColourKeyWindow keyWindow = new ColourKeyWindow(this);
 	public Evolver evolver = new Evolver(this, stepTime, forward);
-
+	
 	// Instance Components:
 	private Container cPane;
 	private JPanel contentPane = new JPanel();
 	private JScrollPane  cScrollPane = new JScrollPane(contentPane);
-
-	private JMenuItem newMi = new JMenuItem("New Game");
-
+	
+	private JMenuItem newMi  = new JMenuItem("New Game");
+    private JMenuItem openMi = new JMenuItem("Open Preset");
+    private JMenuItem saveMi = new JMenuItem("Save As Preset");
+	
 	private JLabel colourLabel = new JLabel("Colour Key:");
 	private JPanel[] colourPanel   = new JPanel[4];
 	private JLabel[] cellTypeLabel = new JLabel[4];
@@ -110,7 +138,6 @@ public class GameOfLife extends JFrame implements MouseListener
 		"Select up to 9 grid cells using the mouse and then press the play button...\n"
 	);
 	private JScrollPane infoScrollPane = new JScrollPane(info);
-	private JPanel infoPanel = new JPanel();
 	private JLabel settingsLabel = new JLabel("Settings:");
 	private JTextField evolveField  = new JTextField(" Evolve: ");
 	private JButton forwardsButton  = new JButton("Forwards");
@@ -121,7 +148,7 @@ public class GameOfLife extends JFrame implements MouseListener
 	private JButton timeUpButton   = new JButton("+");
 	private JButton timeDownButton = new JButton("-");
 	private JPanel timePanel = new JPanel();
-
+	
 	private JDialog quitDialog         = new JDialog(this,"Quit Game?",true);
 	private JButton[] quitDialogOption = new JButton[2];
 	private JDialog newDialog          = new JDialog(this,"New Game?",true);
@@ -156,57 +183,59 @@ public class GameOfLife extends JFrame implements MouseListener
 	private JButton[] diehardOption = new JButton[2];
 	private JDialog   acornDialog   = new JDialog(this, "'Acorn' preset",true);
 	private JButton[] acornOption   = new JButton[2];
-
+	
 	private JFrame aboutWindow = new JFrame("About this program...");
 	private Container aboutPane;
 	private JTextArea aboutTextArea = new JTextArea();
 	private JScrollPane  aboutScrollPane = new JScrollPane(aboutTextArea);
-
-	public void set_constraints(Container pane, GridBagConstraints c, Component component,
+	
+	private JFileChooser fileChooser = new JFileChooser();
+	
+	public static void set_constraints(Container pane, GridBagConstraints c, Component component,
 								int x, int y, int width, int height)
 	{
-        c.fill = GridBagConstraints.BOTH;
-        c.gridx = x;
-        c.gridy = y;
-        c.gridwidth = width;
-        c.gridheight = height;
-        c.weightx = 0.0;
-        c.weighty = 0.0;
-        pane.add(component, c);
+	    c.fill = GridBagConstraints.BOTH;
+	    c.gridx = x;
+	    c.gridy = y;
+	    c.gridwidth = width;
+	    c.gridheight = height;
+	    c.weightx = 0.0;
+	    c.weighty = 0.0;
+	    pane.add(component, c);
 	}
-
+	
 	// Overides the method with a java.awt.Insets setting
-	public void set_constraints(Container pane, GridBagConstraints c, Component component,
+	public static void set_constraints(Container pane, GridBagConstraints c, Component component,
 								int x, int y, int width, int height, Insets insets)
 	{
-        c.fill = GridBagConstraints.BOTH;
-        c.gridx = x;
-        c.gridy = y;
-        c.gridwidth = width;
-        c.gridheight = height;
-        c.weightx = 0.0;
-        c.weighty = 0.0;
-        c.insets = insets;
-        pane.add(component, c);
+	    c.fill = GridBagConstraints.BOTH;
+	    c.gridx = x;
+	    c.gridy = y;
+	    c.gridwidth = width;
+	    c.gridheight = height;
+	    c.weightx = 0.0;
+	    c.weighty = 0.0;
+	    c.insets = insets;
+	    pane.add(component, c);
 	}
-
+	
 	public void addOptionDialog(final JDialog d, JButton[] button, String msg)
 	{
 		String[] string = { "Yes","No" };
-
+	
 		for(int i=0; i<button.length; i++)
 		{
 			button[i] = new JButton(string[i]);
 			button[i].setFocusable(false);
 		}
-
+	
 		// the final button in the array will always cancel the command and hide of the dialog...
 		button[button.length - 1].addActionListener(new ActionListener()
 		{
 			public void actionPerformed(ActionEvent e)
 			{ d.setVisible(false); }
 		});
-
+	
 		final JTextArea textArea = new JTextArea(msg);
 		textArea.setEditable (false);
 		textArea.setFocusable(false);
@@ -214,40 +243,40 @@ public class GameOfLife extends JFrame implements MouseListener
 								 JOptionPane.YES_NO_OPTION, null, button, button[0]);
 		textArea.setFont(font3_b);
 		textArea.setBackground(oPane.getBackground());
-
+	
 		d.setContentPane(oPane);
 		d.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
 		d.pack();
 		d.setResizable(false);
 	}
-
+	
 	public void postInfo(String string, boolean line_feed)
 	{
 		String suffix = "\n";
-
+	
 		if(!line_feed) { suffix = ""; }
-
+	
 		info.append(string + suffix);
 		info.setCaretPosition( info.getDocument().getLength() ); // sends the scroll bar to the bottom
-
+	
 		//JScrollBar scrollBar = infoScrollPane.getVerticalScrollBar();
 		//scrollBar.setValue( scrollBar.getMaximum() );
 	}
-
+	
 	public void resetTimeArea(double time)
 	{
 		String string = " Step Time = \n ";
-
+	
 		time = Math.round(time * 10);
 		time /= 10; // rounds to 1 decimal place
 		string += time + " seconds ";
 		timeArea.setText(string);
 	}
-
+	
 	public Point getObjectPoint(Object object)
 	{
 		Point point = null;
-
+	
 		for(int i=0; i<grid.length; i++)
 		{
 			for(int j=0; j<grid[i].length; j++)
@@ -259,10 +288,10 @@ public class GameOfLife extends JFrame implements MouseListener
 			}
 		}
 		System.out.printf(point+"\n");
-
+	
 		return point;
 	}
-
+	
 	// Debug dump method for the 2D Array of grid flags:
 	public void dumpGridFlagArray()
 	{
@@ -277,7 +306,7 @@ public class GameOfLife extends JFrame implements MouseListener
 		}
 		System.out.printf("\n");
 	}
-
+	
 	public void clearFlagArray(boolean[][] flag)
 	{
 		for(int i=0; i<flag.length; i++)
@@ -286,7 +315,7 @@ public class GameOfLife extends JFrame implements MouseListener
 			{ flag[i][j] = false; }
 		}
 	}
-
+	
 	public void copyFromBuffer(boolean[][] buffer, boolean[][] target)
 	{
 		for(int i=0; i<target.length; i++)
@@ -295,23 +324,23 @@ public class GameOfLife extends JFrame implements MouseListener
 			{ target[i][j] = buffer[i][j]; }
 		}
 	}
-
+	
 	public void storeStartFlags()
 	{
 		// Store the game's start position in memory...
 		copyFromBuffer(gridFlag, startGridFlag);
-
+	
 		// Also store the game's start position at the start of the backwards buffer...
 		copyFromBuffer(gridFlag, backwardsBuffer[0]);
 		backwardsIndex++;
 		maxBackwardsIndex++;
-
+	
 		newButton.setEnabled(true);
 		newMi.setEnabled(true);
-
+	
 		gameStarted = true;
 	}
-
+	
 	public void clearPanelArray(JPanel[][] panel)
 	{
 		for(int i=0; i<panel.length; i++)
@@ -320,7 +349,7 @@ public class GameOfLife extends JFrame implements MouseListener
 			{ panel[i][j].setBackground(Color.white); }
 		}
 	}
-
+	
 	/*
 	   Method stiches the left/right & top/bottom grid coordinates together
 	   to prevent cells from 'falling of the edges' of the grid...
@@ -329,19 +358,19 @@ public class GameOfLife extends JFrame implements MouseListener
 	{
 		//if     (c == -1) { c = 9; }
 		//else if(c == 10) { c = 0; }
-
+	
 		if      (c < 0) { c += 10; }
 		else if (c > 9) { c %= 10; }
-
+	
 		return c;
 	}
-
+	
 	public Color colorizeCell(Point point, boolean opaqe)
 	{
 		int x, y;
 		int adjacent = 0; // counts adjacent cells
 		Color color = null;
-
+	
 		for(int i=-1; i<2; i++)
 		{
 			for(int j=-1; j<2; j++)
@@ -350,21 +379,21 @@ public class GameOfLife extends JFrame implements MouseListener
 				y = point.y + j;
 				x = wrapCellCoordinate(x);
 				y = wrapCellCoordinate(y);
-
+	
 				if(x != point.x || y != point.y)
 				{
 					if(gridFlag[x][y]) { adjacent++; }
 				}
 			}
 		}
-
+	
 		if     (adjacent < 2) { color = Color.green; }
 		else if(adjacent > 3) { color = Color.red;   }
 		else                  { color = Color.blue;  }
-
+	
 		return color;
 	}
-
+	
 	public void recolorizeLiveCells()
 	{
 		for(int i=0; i<grid.length; i++)
@@ -376,11 +405,11 @@ public class GameOfLife extends JFrame implements MouseListener
 			}
 		}
 	}
-
+	
 	/**
 	    Method determines whether a cell survives or is reproduced
 	    in the next generation and returns a boolean flag.
-
+	
 	    This works by comparing its coordinates to its adjacent
 	    cells in the gridFlag[][] boolean array...
 	*/
@@ -389,7 +418,7 @@ public class GameOfLife extends JFrame implements MouseListener
 		boolean newFlag = false;
 		int x, y;
 		int adjacent = 0; // counts adjacent cells
-
+	
 		for(int i=-1; i<2; i++)
 		{
 			for(int j=-1; j<2; j++)
@@ -398,14 +427,14 @@ public class GameOfLife extends JFrame implements MouseListener
 				y = pointY + j;
 				x = wrapCellCoordinate(x);
 				y = wrapCellCoordinate(y);
-
+	
 				if(x != pointX || y != pointY)
 				{
 					if(gridFlag[x][y]) { adjacent++; }
 				}
 			}
 		}
-
+	
 		// first test whether an exisitng cell survives...
 		if(oldFlag)
 		{
@@ -416,14 +445,14 @@ public class GameOfLife extends JFrame implements MouseListener
 		{
 			if(adjacent == 3) { newFlag = true; }
 		}
-
+	
 		return newFlag;
 	}
-
+	
 	/**
 	    Method uses the gridBuffer[][] boolean array to store all coordinate flags for
 	    the next generation of cells, by comparing them to the values in gridFlag[][]...
-
+	
 	    The values are then copied from gridBuffer[][] to gridFlag[][] and then the flag
 	    buffer values are reset to 'false' gridBuffer[][] in advance of future use...
 	*/
@@ -432,7 +461,7 @@ public class GameOfLife extends JFrame implements MouseListener
 		if( backwardsIndex >= (maxBackwardsIndex -1) )
 		{
 			readingFromBackwardsBuffer = false;
-
+	
 			for(int i=0; i<grid.length; i++)
 			{
 				for(int j=0; j<grid[i].length; j++)
@@ -440,9 +469,9 @@ public class GameOfLife extends JFrame implements MouseListener
 					gridBuffer[i][j] = isNextGenerationCell(i,j,gridFlag[i][j]);
 				}
 			}
-
+	
 			copyFromBuffer(gridBuffer, gridFlag);
-
+	
 			// store flags to allow the cells to evolve backwards also...
 			if(backwardsIndex < backwardsBufferSize)
 			{
@@ -459,10 +488,10 @@ public class GameOfLife extends JFrame implements MouseListener
 					2] Shift all other elements down one index, using a loop.
 					3] Store the newest cell configuration in the highest element...
 				*/
-
+	
 				for(int i=0; i < (backwardsBufferSize - 1); i++)
 				{ copyFromBuffer(backwardsBuffer[i + 1], backwardsBuffer[i]); }
-
+	
 				copyFromBuffer(gridBuffer, backwardsBuffer[backwardsBufferSize - 1]);
 			}
 		}
@@ -473,17 +502,17 @@ public class GameOfLife extends JFrame implements MouseListener
 			else                   { backwardsIndex++;   }
 			copyFromBuffer(backwardsBuffer[backwardsIndex], gridFlag);
 		}
-
+	
 		clearFlagArray(gridBuffer);
 		clearPanelArray(grid);
 		recolorizeLiveCells();
 	}
-
+	
 	public void createLastGeneration()
 	{
 		if( backwardsIndex >= -1 && (!readingFromBackwardsBuffer || !forward) )
 		{ backwardsIndex--; }
-
+	
 		if(backwardsIndex >= 0 )
 		{
 			copyFromBuffer(backwardsBuffer[backwardsIndex], gridFlag);
@@ -493,21 +522,21 @@ public class GameOfLife extends JFrame implements MouseListener
 		else
 		{
 			String msg = "The backwards buffer has reached its limit, "
-			+"no more backwards steps have been stored by the program.";
-
+			+ "no more backwards steps have been stored by the program.";
+	
 			postInfo(msg,true);
 			evolver.cancel();
 			play = false;
 		}
-
+	
 		forward = false;
 		readingFromBackwardsBuffer = true;
 	}
-
+	
 	public void shiftCells(int offsetX, int offsetY)
 	{
 		int x, y;
-
+	
 		for(int i=0; i<grid.length; i++)
 		{
 			for(int j=0; j<grid[i].length; j++)
@@ -518,22 +547,22 @@ public class GameOfLife extends JFrame implements MouseListener
 					y = offsetY + j;
 					x = wrapCellCoordinate(x);
 					y = wrapCellCoordinate(y);
-
+	
 					gridBuffer[x][y] = true;
 				}
 			}
 		}
-
+	
 		copyFromBuffer(gridBuffer, gridFlag);
 		clearFlagArray(gridBuffer);
 		clearPanelArray(grid);
 		recolorizeLiveCells();
 	}
-
+	
 	public void reinitializeGame()
 	{
 		evolver.cancel();
-
+	
 		// Reinitialize instance variables and arrays:
 		gameStarted = false;
 		play        = false;
@@ -543,21 +572,19 @@ public class GameOfLife extends JFrame implements MouseListener
 		clearFlagArray(gridFlag);
 		clearFlagArray(gridBuffer);
 		clearFlagArray(startGridFlag);
-
+	
 		for(int i=0; i<backwardsBufferSize; i++)
 		{ clearFlagArray(backwardsBuffer[i]); }
-
+	
 		maxBackwardsIndex = 0;
 		backwardsIndex    = 0;
 		cellCount = 0;
 		stepTime = 0.5;
-
+	
 		playButton.setEnabled(true);
 		stopButton.setEnabled(false);
 		newButton.setEnabled(false);
 		newMi.setEnabled(false);
-		openButton.setEnabled(false);
-		saveButton.setEnabled(false);
 		evolveField.setForeground(Color.green);
 		forwardsButton.setEnabled(false);
 		backwardsButton.setEnabled(false);
@@ -572,18 +599,188 @@ public class GameOfLife extends JFrame implements MouseListener
 		);
 		clearPanelArray(grid);
 	}
+	
+	public String createGridString()
+	{
+		String string = "";
+		
+		if(!gameStarted) { copyFromBuffer(gridFlag, startGridFlag); }
 
-    public void mousePressed(MouseEvent e)
-    {
+		for(int i=0; i<grid.length; i++)
+		{
+			for(int j=0; j<grid[i].length; j++)
+			{
+				char flag = startGridFlag[j][i] == false ? '-' : 'X';
+				string += flag;
+			}
+			string += "\n";
+		}
+		//System.out.printf(string+"\n");	
+		
+		return string;
+	}
+
+	public FileWriter showSaveChooser()
+			throws IOException, EOFException, UnsupportedEncodingException
+	{
+		FileWriter writer = null;
+        int returnVal = fileChooser.showSaveDialog(this);
+        String buffer = createGridString();
+
+        if (returnVal == JFileChooser.APPROVE_OPTION)
+        {
+            File file = fileChooser.getSelectedFile();
+            String msg;
+            
+            try
+            {     
+            	file.setReadOnly();
+            	msg = "Saving User-Defined Preset: '" + file.getName() + "'";
+            	writer = new FileWriter(file);
+            	writer.write(buffer);
+            }
+            catch(FileNotFoundException e)
+            { msg = "The user preset file '" + file.getName() + "' already exists!"; }
+            
+            postInfo(msg, true);
+        }
+        
+        return writer;
+	}
+	
+	public void errorCheckSave()
+	{
+		FileWriter writer = null;
+		
+		try { writer = showSaveChooser(); } 
+		catch (EOFException e) 
+		{ e.printStackTrace(); }
+		catch (UnsupportedEncodingException e)
+		{ e.printStackTrace(); }
+		catch (IOException e)
+		{ e.printStackTrace(); }
+		finally
+		{
+			if(writer != null)
+			{
+				try { writer.close(); }
+				catch (IOException e)
+				{ e.printStackTrace(); }
+			}
+		}
+	}
+	
+	public FileReader showOpenChooser()
+			throws IOException, EOFException, UnsupportedEncodingException
+	{
+		FileReader reader = null;
+        int returnVal = fileChooser.showOpenDialog(this);
+
+        if (returnVal == JFileChooser.APPROVE_OPTION)
+        {
+        	int i = 0;
+        	boolean fileExists = true;
+        	BufferedReader buffer = null;
+        	File file = fileChooser.getSelectedFile();
+        	String line = "";
+        	String msg = "";
+        	
+        	try
+        	{
+        		reader = new FileReader(file);
+        		buffer = new BufferedReader(reader);
+        	}
+            catch(FileNotFoundException e)
+            { 
+            	fileExists = false;
+            	msg = "The user preset file '" + file.getName() + "' does not exist!";
+            }
+        	
+        	if(fileExists)
+        	{
+	        	reinitializeGame();
+	        	
+	        	while( ( line = buffer.readLine() ) != null )
+	        	{
+	        		char[] c = new char[line.length()];
+	        		line.getChars(0, line.length(), c, 0);
+	        		
+	        		for(int j=0; j<line.length(); j++)
+	        		{
+	        			boolean cell = false;
+	        			
+	        			if(c[j] == 'X')
+	        			{ 
+	        				cell = true;
+	        				cellCount++;
+	        			}
+	        			else if(c[j] == '-') { /* statement acts as char filter */ }
+	        			else
+	        			{
+	        				postInfo(
+	        					"File Error: '" + c[j] + "' is an invalid character!",
+	        					true
+	        				);
+	        			}
+	        			gridFlag[j][i] = cell;
+	        		}
+	        		i++;
+	        		//System.out.println(line);
+	        	}
+	        	//System.out.println();
+	        	recolorizeLiveCells();
+	        	
+	        	info.setText("Opening User-Defined Preset:\n'" + file.getName() + "'");
+	        	msg = "";
+        	}
+        	
+        	postInfo(msg, true);
+        }
+        
+        return reader;
+	}
+	
+	public void errorCheckOpen()
+	{
+		FileReader reader = null;
+		
+		try { reader = showOpenChooser(); }
+		catch (EOFException e)
+		{ e.printStackTrace(); }
+		catch (UnsupportedEncodingException e)
+		{ e.printStackTrace(); }
+		catch (IOException e)
+		{ e.printStackTrace(); }
+		finally
+		{
+			if(reader != null)
+			{
+				try { reader.close(); }
+				catch (IOException e)
+				{ e.printStackTrace(); }
+			}
+		}
+	}
+	
+	public void openHelpPDF()
+	{
+		if ( Desktop.isDesktopSupported() )
+		{
+	        try { Desktop.getDesktop().open(helpFile);   }
+	        catch (IOException e) { e.printStackTrace(); }
+		}
+	}
+
+	public void mousePressed(MouseEvent e)
+	{
 		if(!gameStarted)
 		{
 			Point point = getObjectPoint( e.getComponent() );
-
+	
 			if(!gridFlag[point.x][point.y])
 			{
 				if(cellCount < 9)
 				{
-					//e.getComponent().setBackground( colorizeCell(point,true) );
 					gridFlag[point.x][point.y] = true;
 					cellCount++;
 					recolorizeLiveCells();
@@ -598,50 +795,54 @@ public class GameOfLife extends JFrame implements MouseListener
 				cellCount--;
 				recolorizeLiveCells();
 			}
-
+	
 			dumpGridFlagArray();
 		}
 		else
 		{
 			String msg = "No further cells can be added or removed once the game has started, "
 			+ "start a new game to run a different cell configuration.";
-
+	
 			postInfo(msg,true);
 		}
-    }
-
-    public void mouseReleased(MouseEvent e)
-    {
-        //System.out.printf("Mouse released\n");
-    }
-
-    public void mouseEntered(MouseEvent e)
-    {
-        //System.out.printf("Mouse entered\n");
-    }
-
-    public void mouseExited(MouseEvent e)
-    {
-        //System.out.printf("Mouse exited\n");
-    }
-
-    public void mouseClicked(MouseEvent e)
-    {
-        //System.out.printf("Mouse clicked\n");
-    }
-
+	}
+	
+	public void mouseReleased(MouseEvent e)
+	{
+	    //System.out.printf("Mouse released\n");
+	}
+	
+	public void mouseEntered(MouseEvent e)
+	{
+	    //System.out.printf("Mouse entered\n");
+	}
+	
+	public void mouseExited(MouseEvent e)
+	{
+	    //System.out.printf("Mouse exited\n");
+	}
+	
+	public void mouseClicked(MouseEvent e)
+	{
+	    //System.out.printf("Mouse clicked\n");
+	}
+	
 	public GameOfLife()
 	{
 		super("Conway's Game of Life");
 		setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
 
-        // Set Panel & JScrollPane on the main JFrame's Container...
-      	cPane = getContentPane();
-      	cPane.add(cScrollPane);
-        contentPane.setLayout(new GridBagLayout());
-        contentPane.setBackground(Color.lightGray);
-        contentPane.setBorder( BorderFactory.createEmptyBorder(8,15,15,15) );
-
+		// Set User Presets Directory...
+        fileChooser.setCurrentDirectory(userDir);
+        System.out.printf("User Presets Directory = " + userDir + "\n");
+	
+	    // Set Panel & JScrollPane on the main JFrame's Container...
+	  	cPane = getContentPane();
+	  	cPane.add(cScrollPane);
+	    contentPane.setLayout(new GridBagLayout());
+	    contentPane.setBackground(Color.lightGray);
+	    contentPane.setBorder( BorderFactory.createEmptyBorder(8,15,15,15) );
+	
 		// Create an option dialog to close the program...
 		addOptionDialog(quitDialog, quitDialogOption,
 			"    Are you sure that\n    you wish to quit?"
@@ -662,51 +863,56 @@ public class GameOfLife extends JFrame implements MouseListener
 		addOptionDialog(rPentDialog, rPentOption, "    Load 'R-pentomino' preset?...");
 		addOptionDialog(diehardDialog, diehardOption, "    Load 'Diehard' preset?...");
 		addOptionDialog(acornDialog, acornOption, "    Load 'Acorn' preset?...");
-
-        JMenuBar menubar = new JMenuBar();
-
+	
+	    JMenuBar menubar = new JMenuBar();
+	
 		// File Menu:
-        JMenu fileMenu = new JMenu("File");
-        fileMenu.setMnemonic(KeyEvent.VK_F);
-        //JMenuItem newMi  = new JMenuItem("New Game");
-        newMi.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_N, ActionEvent.CTRL_MASK));
-        newMi.addActionListener(new ActionListener()
-        {
+	    JMenu fileMenu = new JMenu("File");
+	    fileMenu.setMnemonic(KeyEvent.VK_F);
+	    newMi.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_N, ActionEvent.CTRL_MASK));
+	    newMi.addActionListener(new ActionListener()
+	    {
 			public void actionPerformed(ActionEvent event)
 			{
 				newDialog.setLocationRelativeTo(contentPane);
 				newDialog.setVisible(true);
 			}
-        });
-
-        JMenuItem openMi = new JMenuItem("Open Preset");
-        openMi.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O, ActionEvent.CTRL_MASK));
-        JMenuItem saveMi = new JMenuItem("Save As Preset");
-        saveMi.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, ActionEvent.CTRL_MASK));
-        JMenuItem quitMi = new JMenuItem("Quit");
-
+	    });
+	    openMi.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O, ActionEvent.CTRL_MASK));
+	    openMi.addActionListener(new ActionListener()
+	    {
+			public void actionPerformed(ActionEvent event)
+			{ errorCheckOpen(); }
+	    });
+	    saveMi.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, ActionEvent.CTRL_MASK));
+	    saveMi.addActionListener(new ActionListener()
+	    {
+			public void actionPerformed(ActionEvent event)
+			{ errorCheckSave(); }
+	    });
+	    JMenuItem quitMi = new JMenuItem("Quit");
 		quitMi.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_Q, ActionEvent.CTRL_MASK));
-        quitMi.addActionListener(new ActionListener()
-        {
+	    quitMi.addActionListener(new ActionListener()
+	    {
 			public void actionPerformed(ActionEvent event)
 			{
 				quitDialog.setLocationRelativeTo(contentPane);
 				quitDialog.setVisible(true);
 			}
-        });
-        fileMenu.add(newMi);
-        fileMenu.add(openMi);
-        fileMenu.add(saveMi);
-        fileMenu.addSeparator();
-        fileMenu.add(quitMi);
-        menubar.add(fileMenu);
-
-        // Presets Menu:
-        JMenu presetsMenu = new JMenu("Presets");
-        presetsMenu.setMnemonic(KeyEvent.VK_P);
-        // Still Lifes Submenu:
-        JMenu stillMenu = new JMenu("Still Lifes");
-        JMenuItem blockMi = new JMenuItem("Block");
+	    });
+	    fileMenu.add(newMi);
+	    fileMenu.add(openMi);
+	    fileMenu.add(saveMi);
+	    fileMenu.addSeparator();
+	    fileMenu.add(quitMi);
+	    menubar.add(fileMenu);
+	
+	    // Presets Menu:
+	    JMenu presetsMenu = new JMenu("Presets");
+	    presetsMenu.setMnemonic(KeyEvent.VK_P);
+	    // Still Lifes Submenu:
+	    JMenu stillMenu = new JMenu("Still Lifes");
+	    JMenuItem blockMi = new JMenuItem("Block");
 		blockMi.addActionListener(new ActionListener()
 		{
 			public void actionPerformed(ActionEvent event)
@@ -714,8 +920,8 @@ public class GameOfLife extends JFrame implements MouseListener
 				blockDialog.setLocationRelativeTo(contentPane);
 				blockDialog.setVisible(true);
 			}
-        });
-        JMenuItem beehiveMi = new JMenuItem("Beehive");
+	    });
+	    JMenuItem beehiveMi = new JMenuItem("Beehive");
 		beehiveMi.addActionListener(new ActionListener()
 		{
 			public void actionPerformed(ActionEvent event)
@@ -723,8 +929,8 @@ public class GameOfLife extends JFrame implements MouseListener
 				beehiveDialog.setLocationRelativeTo(contentPane);
 				beehiveDialog.setVisible(true);
 			}
-        });
-        JMenuItem loafMi = new JMenuItem("Loaf");
+	    });
+	    JMenuItem loafMi = new JMenuItem("Loaf");
 		loafMi.addActionListener(new ActionListener()
 		{
 			public void actionPerformed(ActionEvent event)
@@ -732,8 +938,8 @@ public class GameOfLife extends JFrame implements MouseListener
 				loafDialog.setLocationRelativeTo(contentPane);
 				loafDialog.setVisible(true);
 			}
-        });
-        JMenuItem boatMi = new JMenuItem("Boat");
+	    });
+	    JMenuItem boatMi = new JMenuItem("Boat");
 		boatMi.addActionListener(new ActionListener()
 		{
 			public void actionPerformed(ActionEvent event)
@@ -741,8 +947,8 @@ public class GameOfLife extends JFrame implements MouseListener
 				boatDialog.setLocationRelativeTo(contentPane);
 				boatDialog.setVisible(true);
 			}
-        });
-        JMenuItem tubMi  = new JMenuItem("Tub");
+	    });
+	    JMenuItem tubMi  = new JMenuItem("Tub");
 		tubMi.addActionListener(new ActionListener()
 		{
 			public void actionPerformed(ActionEvent event)
@@ -750,18 +956,18 @@ public class GameOfLife extends JFrame implements MouseListener
 				tubDialog.setLocationRelativeTo(contentPane);
 				tubDialog.setVisible(true);
 			}
-        });
-        stillMenu.add(blockMi);
-        stillMenu.add(beehiveMi);
-        stillMenu.add(loafMi);
-        stillMenu.add(boatMi);
-        stillMenu.add(tubMi);
-
-        // Oscillators Submenu:
-        JMenu oscMenu = new JMenu("Oscillators" );
-        // Period 2 Submenu:
-        JMenu period2Menu = new JMenu("Period 2");
-        JMenuItem blinkerMi = new JMenuItem("Blinker");
+	    });
+	    stillMenu.add(blockMi);
+	    stillMenu.add(beehiveMi);
+	    stillMenu.add(loafMi);
+	    stillMenu.add(boatMi);
+	    stillMenu.add(tubMi);
+	
+	    // Oscillators Submenu:
+	    JMenu oscMenu = new JMenu("Oscillators" );
+	    // Period 2 Submenu:
+	    JMenu period2Menu = new JMenu("Period 2");
+	    JMenuItem blinkerMi = new JMenuItem("Blinker");
 		blinkerMi.addActionListener(new ActionListener()
 		{
 			public void actionPerformed(ActionEvent event)
@@ -769,8 +975,8 @@ public class GameOfLife extends JFrame implements MouseListener
 				blinkerDialog.setLocationRelativeTo(contentPane);
 				blinkerDialog.setVisible(true);
 			}
-        });
-        JMenuItem toadMi    = new JMenuItem("Toad");
+	    });
+	    JMenuItem toadMi    = new JMenuItem("Toad");
 		toadMi.addActionListener(new ActionListener()
 		{
 			public void actionPerformed(ActionEvent event)
@@ -778,8 +984,8 @@ public class GameOfLife extends JFrame implements MouseListener
 				toadDialog.setLocationRelativeTo(contentPane);
 				toadDialog.setVisible(true);
 			}
-        });
-        JMenuItem beaconMi  = new JMenuItem("Beacon");
+	    });
+	    JMenuItem beaconMi  = new JMenuItem("Beacon");
 		beaconMi.addActionListener(new ActionListener()
 		{
 			public void actionPerformed(ActionEvent event)
@@ -787,32 +993,32 @@ public class GameOfLife extends JFrame implements MouseListener
 				beaconDialog.setLocationRelativeTo(contentPane);
 				beaconDialog.setVisible(true);
 			}
-        });
-        period2Menu.add(blinkerMi);
-        period2Menu.add(toadMi);
-        period2Menu.add(beaconMi);
-        // Period 3 Submenu
-        JMenu period3Menu = new JMenu("Period 3");
-        JMenuItem pulsarMi     = new JMenuItem("Pulsar");
-        JMenuItem starMi       = new JMenuItem("Star");
-        JMenuItem crossMi       = new JMenuItem("Cross");
-        JMenuItem frenchKissMi = new JMenuItem("French kiss");
-
-        period3Menu.add(pulsarMi);
-        period3Menu.add(starMi);
-        period3Menu.add(crossMi);
-        period3Menu.add(frenchKissMi);
-        pulsarMi.setEnabled(false);
-        starMi.setEnabled(false);
-        crossMi.setEnabled(false);
-        frenchKissMi.setEnabled(false);
-
-        oscMenu.add(period2Menu);
-        oscMenu.add(period3Menu);
-
-        // Spaceships Submenu:
-        JMenu spaceMenu = new JMenu("Spaceships");
-        JMenuItem gliderMi = new JMenuItem("Glider");
+	    });
+	    period2Menu.add(blinkerMi);
+	    period2Menu.add(toadMi);
+	    period2Menu.add(beaconMi);
+	    // Period 3 Submenu
+	    JMenu period3Menu = new JMenu("Period 3");
+	    JMenuItem pulsarMi     = new JMenuItem("Pulsar");
+	    JMenuItem starMi       = new JMenuItem("Star");
+	    JMenuItem crossMi       = new JMenuItem("Cross");
+	    JMenuItem frenchKissMi = new JMenuItem("French kiss");
+	
+	    period3Menu.add(pulsarMi);
+	    period3Menu.add(starMi);
+	    period3Menu.add(crossMi);
+	    period3Menu.add(frenchKissMi);
+	    pulsarMi.setEnabled(false);
+	    starMi.setEnabled(false);
+	    crossMi.setEnabled(false);
+	    frenchKissMi.setEnabled(false);
+	
+	    oscMenu.add(period2Menu);
+	    oscMenu.add(period3Menu);
+	
+	    // Spaceships Submenu:
+	    JMenu spaceMenu = new JMenu("Spaceships");
+	    JMenuItem gliderMi = new JMenuItem("Glider");
 		gliderMi.addActionListener(new ActionListener()
 		{
 			public void actionPerformed(ActionEvent event)
@@ -820,8 +1026,8 @@ public class GameOfLife extends JFrame implements MouseListener
 				gliderDialog.setLocationRelativeTo(contentPane);
 				gliderDialog.setVisible(true);
 			}
-        });
-        JMenuItem lwssMi   = new JMenuItem("LWSS");
+	    });
+	    JMenuItem lwssMi   = new JMenuItem("LWSS");
 		lwssMi.addActionListener(new ActionListener()
 		{
 			public void actionPerformed(ActionEvent event)
@@ -829,13 +1035,13 @@ public class GameOfLife extends JFrame implements MouseListener
 				lwssDialog.setLocationRelativeTo(contentPane);
 				lwssDialog.setVisible(true);
 			}
-        });
-        spaceMenu.add(gliderMi);
-        spaceMenu.add(lwssMi);
-
-        // Chaotic Submenu:
-        JMenu chaosMenu = new JMenu("Chaotic");
-        JMenuItem rPentMi   = new JMenuItem("R-pentomino");
+	    });
+	    spaceMenu.add(gliderMi);
+	    spaceMenu.add(lwssMi);
+	
+	    // Chaotic Submenu:
+	    JMenu chaosMenu = new JMenu("Chaotic");
+	    JMenuItem rPentMi   = new JMenuItem("R-pentomino");
 		rPentMi.addActionListener(new ActionListener()
 		{
 			public void actionPerformed(ActionEvent event)
@@ -843,8 +1049,8 @@ public class GameOfLife extends JFrame implements MouseListener
 				rPentDialog.setLocationRelativeTo(contentPane);
 				rPentDialog.setVisible(true);
 			}
-        });
-        JMenuItem diehardMi = new JMenuItem("Diehard");
+	    });
+	    JMenuItem diehardMi = new JMenuItem("Diehard");
 		diehardMi.addActionListener(new ActionListener()
 		{
 			public void actionPerformed(ActionEvent event)
@@ -852,8 +1058,8 @@ public class GameOfLife extends JFrame implements MouseListener
 				diehardDialog.setLocationRelativeTo(contentPane);
 				diehardDialog.setVisible(true);
 			}
-        });
-        JMenuItem acornMi   = new JMenuItem("Acorn");
+	    });
+	    JMenuItem acornMi   = new JMenuItem("Acorn");
 		acornMi.addActionListener(new ActionListener()
 		{
 			public void actionPerformed(ActionEvent event)
@@ -861,32 +1067,45 @@ public class GameOfLife extends JFrame implements MouseListener
 				acornDialog.setLocationRelativeTo(contentPane);
 				acornDialog.setVisible(true);
 			}
-        });
-        chaosMenu.add(rPentMi);
-        chaosMenu.add(diehardMi);
-        chaosMenu.add(acornMi);
-
-        // User Defined Submenu:
-        JMenu userMenu = new JMenu("User Defined");
-        JMenuItem emptyMi = new JMenuItem("Empty");
-        userMenu.add(emptyMi);
-        emptyMi.setEnabled(false);
-
-        presetsMenu.add(stillMenu);
-        presetsMenu.add(oscMenu);
-        presetsMenu.add(spaceMenu);
-        presetsMenu.add(chaosMenu);
-        presetsMenu.addSeparator();
-        presetsMenu.add(userMenu);
-        menubar.add(presetsMenu);
-
-        // Help Menu:
-        JMenu helpMenu = new JMenu("Help");
-        helpMenu.setMnemonic(KeyEvent.VK_H);
-        JMenuItem htmlGuideMi = new JMenuItem("User Guide (HTML Tree)");
-        JMenuItem pdfGuideMi = new JMenuItem("User Guide (PDF)");
-        JMenuItem colourKeyMi = new JMenuItem("Extended Colour Key");
-        JMenuItem aboutMi     = new JMenuItem("About");
+	    });
+	    chaosMenu.add(rPentMi);
+	    chaosMenu.add(diehardMi);
+	    chaosMenu.add(acornMi);
+	
+	    // User Defined Submenu:
+	    JMenu userMenu = new JMenu("User Defined");
+	    JMenuItem emptyMi = new JMenuItem("Empty");
+	    userMenu.add(emptyMi);
+	    emptyMi.setEnabled(false);
+	
+	    presetsMenu.add(stillMenu);
+	    presetsMenu.add(oscMenu);
+	    presetsMenu.add(spaceMenu);
+	    presetsMenu.add(chaosMenu);
+	    presetsMenu.addSeparator();
+	    presetsMenu.add(userMenu);
+	    menubar.add(presetsMenu);
+	
+	    // Help Menu:
+	    JMenu helpMenu = new JMenu("Help");
+	    helpMenu.setMnemonic(KeyEvent.VK_H);
+	    JMenuItem htmlGuideMi = new JMenuItem("User Guide (HTML Tree)");
+	    JMenuItem pdfGuideMi = new JMenuItem("User Guide (PDF)");
+		pdfGuideMi.addActionListener(new ActionListener()
+		{
+			public void actionPerformed(ActionEvent event)
+			{ openHelpPDF(); }
+	    });	    
+	    JMenuItem colourKeyMi = new JMenuItem("Extended Colour Key");
+		colourKeyMi.addActionListener(new ActionListener()
+		{
+			public void actionPerformed(ActionEvent event)
+			{
+				keyWindow.setLocationRelativeTo(contentPane);
+				keyWindow.setVisible(true);
+			}
+	    });
+	    JMenuItem aboutMi     = new JMenuItem("About");
 		aboutMi.addActionListener(new ActionListener()
 		{
 			public void actionPerformed(ActionEvent event)
@@ -894,21 +1113,21 @@ public class GameOfLife extends JFrame implements MouseListener
 				aboutWindow.setLocationRelativeTo(contentPane);
 				aboutWindow.setVisible(true);
 			}
-        });
-        helpMenu.add(htmlGuideMi);
-        helpMenu.add(pdfGuideMi);
-        helpMenu.addSeparator();
-        helpMenu.add(colourKeyMi);
-        helpMenu.addSeparator();
-        helpMenu.add(aboutMi);
-        menubar.add(helpMenu);
-
-        setJMenuBar(menubar);
-
+	    });
+	    helpMenu.add(htmlGuideMi);
+	    helpMenu.add(pdfGuideMi);
+	    helpMenu.addSeparator();
+	    helpMenu.add(colourKeyMi);
+	    helpMenu.addSeparator();
+	    helpMenu.add(aboutMi);
+	    menubar.add(helpMenu);
+	
+	    setJMenuBar(menubar);
+	
 		// Set constraints and add components:
 		colourLabel.setFont(font4_mono_b);
 		set_constraints( contentPane, new GridBagConstraints(), colourLabel, 0,1,4,1, new Insets(20,0,0,0) );
-
+	
 		Color[] colourArray = { Color.white, Color.green, Color.blue, Color.red };
 		String[] cellTypeString = {
 			" = Empty Cell "," = Underpopulated "," = Next Generation "," = Overpopulated "
@@ -921,17 +1140,17 @@ public class GameOfLife extends JFrame implements MouseListener
 			set_constraints( contentPane, new GridBagConstraints(),
 				colourPanel[i], 0,(i+3),1,1, new Insets(2,2,2,2)
 			);
-
+	
 			cellTypeLabel[i] = new JLabel(cellTypeString[i]);
 			cellTypeLabel[i].setFont(font3_mono_b);
 			set_constraints( contentPane, new GridBagConstraints(), cellTypeLabel[i], 1,(i+3),3,1 );
 		}
-
+	
 		title.setForeground(Color.black);
 		title.setFont(font5_mono_b);
 		title.setHorizontalAlignment(JLabel.CENTER);
 		set_constraints(contentPane, new GridBagConstraints(), title, 4,0,10,1);
-
+	
 		// Add game grid:
 		for(int i=0; i<10; i++)
 		{
@@ -956,44 +1175,44 @@ public class GameOfLife extends JFrame implements MouseListener
 				}
 			}
 		}
-
+	
 		// Add buttons on the left column:
 		playButton.setFont(font4_mono_b);
 		playButton.setBackground(Color.green);
 		playButton.setForeground(Color.blue );
 		playButton.setFocusable(false);
 		set_constraints( contentPane, new GridBagConstraints(), playButton, 6,12,3,1, new Insets(8,0,0,0) );
-
+	
 		stopButton.setFont(font4_mono_b);
 		stopButton.setBackground(darkOrange);
 		stopButton.setForeground(Color.blue);
 		stopButton.setFocusable(false);
 		stopButton.setEnabled(false);
 		set_constraints( contentPane, new GridBagConstraints(), stopButton, 9,12,3,1, new Insets(8,0,0,0) );
-
+	
 		newButton.setFont(font4_mono_b);
 		newButton.setBackground(Color.magenta);
 		newButton.setFocusable(false);
 		newButton.setEnabled(false);
 		newMi.setEnabled(false);
 		set_constraints( contentPane, new GridBagConstraints(), newButton, 6,13,6,1 );
-
+	
 		openButton.setFont(font4_mono_b);
 		openButton.setBackground(Color.yellow);
 		openButton.setFocusable(false);
-		openButton.setEnabled(false);
+		//openButton.setEnabled(false);
 		set_constraints( contentPane, new GridBagConstraints(), openButton, 6,14,6,1 );
-
+	
 		saveButton.setFont(font4_mono_b);
 		saveButton.setBackground(Color.cyan);
 		saveButton.setFocusable(false);
-		saveButton.setEnabled(false);
+		//saveButton.setEnabled(false);
 		set_constraints( contentPane, new GridBagConstraints(), saveButton, 6,15,6,1 );
-
+	
 		shiftLabel.setFont(font4_mono_b);
 		shiftLabel.setHorizontalAlignment(JLabel.LEFT);
 		set_constraints( contentPane, new GridBagConstraints(), shiftLabel, 1,11,3,1 );
-
+	
 		String[] shiftString = { "Up","Down"," Left","Right","\\","\\","/","/" };
 		for(int i=0; i<8; i++)
 		{
@@ -1012,21 +1231,21 @@ public class GameOfLife extends JFrame implements MouseListener
 		set_constraints( contentPane, new GridBagConstraints(), shiftButton[5], 3,14,1,1 );
 		set_constraints( contentPane, new GridBagConstraints(), shiftButton[6], 3,12,1,1, new Insets(8,0,0,0) );
 		set_constraints( contentPane, new GridBagConstraints(), shiftButton[7], 1,14,1,1 );
-
+	
 		shiftPanel.setBackground(Color.cyan);
 		set_constraints( contentPane, new GridBagConstraints(), shiftPanel, 2,13,1,1, new Insets(2,2,2,2) );
-
+	
 		// Add components on the right column:
 		infoLabel.setFont(font4_mono_b);
 		set_constraints( contentPane, new GridBagConstraints(), infoLabel, 14,1,5,1, new Insets(0,35,0,0) );
-
+	
 		clearButton.setBackground(Color.green);
 		//clearButton.setForeground(Color.blue );
 		clearButton.setFont(font3_mono_b);
 		clearButton.setFocusable(false);
 		//clearButton.setPreferredSize(new Dimension(10,10) );
 		set_constraints( contentPane, new GridBagConstraints(), clearButton, 19,1,1,1, new Insets(20,0,0,0 ) );
-
+	
 		//infoScrollPane = new JScrollPane(info);
 		info.setBackground(Color.black);
 		info.setForeground(Color.green);
@@ -1038,17 +1257,17 @@ public class GameOfLife extends JFrame implements MouseListener
 		info.setBorder( BorderFactory.createEmptyBorder(1,7,1,7) );
 		infoScrollPane.setPreferredSize(new Dimension(400,280) );
 		set_constraints( contentPane, new GridBagConstraints(), infoScrollPane, 14,2,6,8, new Insets(0,35,0,0) );
-
+	
 		settingsLabel.setFont(font4_mono_b);
 		set_constraints( contentPane, new GridBagConstraints(), settingsLabel, 14,11,5,1, new Insets(0,12,0,0) );
-
+	
 		evolveField.setBackground(Color.black);
 		evolveField.setForeground(Color.green);
 		evolveField.setFont(font4_mono_b);
 		evolveField.setEditable(false);
 		evolveField.setFocusable(false);
 		set_constraints( contentPane, new GridBagConstraints(), evolveField, 14,12,1,1, new Insets(8,0,0,0) );
-
+	
 		forwardsButton.setBackground(Color.green);
 		forwardsButton.setForeground(Color.blue);
 		forwardsButton.setFont(font4_mono_b);
@@ -1056,26 +1275,26 @@ public class GameOfLife extends JFrame implements MouseListener
 		forwardsButton.setEnabled(false);
 		forwardsButton.setPreferredSize( new Dimension(60,35) );
 		set_constraints( contentPane, new GridBagConstraints(), forwardsButton, 15,12,2,1, new Insets(8,0,0,0) );
-
+	
 		backwardsButton.setBackground(darkOrange);
 		backwardsButton.setForeground(Color.blue);
 		backwardsButton.setFont(font4_mono_b);
 		backwardsButton.setFocusable(false);
 		backwardsButton.setEnabled(false);
 		set_constraints( contentPane, new GridBagConstraints(), backwardsButton, 17,12,3,1, new Insets(8,0,0,70) );
-
+	
 		modeField.setBackground(Color.black);
 		modeField.setForeground(Color.magenta);
 		modeField.setFont(font4_mono_b);
 		modeField.setEditable(false);
 		modeField.setFocusable(false);
 		set_constraints( contentPane, new GridBagConstraints(), modeField, 14,13,2,1 );
-
+	
 		modeButton.setBackground(Color.magenta);
 		modeButton.setFont(font4_mono_b);
 		modeButton.setFocusable(false);
 		set_constraints( contentPane, new GridBagConstraints(), modeButton, 16,13,2,1, new Insets(0,0,0,50) );
-
+	
 		timeArea.setBackground(Color.black);
 		timeArea.setForeground(Color.cyan);
 		timeArea.setFont(font4_mono_b);
@@ -1085,25 +1304,25 @@ public class GameOfLife extends JFrame implements MouseListener
 		timeArea.setWrapStyleWord(true);
 		timeArea.setBorder( BorderFactory.createEmptyBorder(8,11,0,0) );
 		set_constraints( contentPane, new GridBagConstraints(), timeArea, 14,14,2,2, new Insets(1,1,1,1) );
-
+	
 		timeUpButton.setBackground(Color.cyan);
 		timeUpButton.setForeground(Color.red);
 		timeUpButton.setFont(font4_mono_b);
 		timeUpButton.setFocusable(false);
 		timeUpButton.setPreferredSize( new Dimension(35,35) );
 		set_constraints( contentPane, new GridBagConstraints(), timeUpButton, 16,14,1,1 );
-
+	
 		timeDownButton.setBackground(Color.cyan);
 		timeDownButton.setForeground(Color.red);
 		timeDownButton.setFont(font4_mono_b);
 		timeDownButton.setFocusable(false);
 		timeDownButton.setPreferredSize( new Dimension(35,35) );
 		set_constraints( contentPane, new GridBagConstraints(), timeDownButton, 16,15,1,1 );
-
+	
 		timePanel.setBackground(Color.lightGray);
 		timePanel.setPreferredSize( new Dimension(100,35) );
 		set_constraints( contentPane, new GridBagConstraints(), timePanel, 17,14,1,1 );
-
+	
 		addWindowListener(new WindowAdapter()
 		{
 			public void windowClosing(WindowEvent e)
@@ -1112,7 +1331,7 @@ public class GameOfLife extends JFrame implements MouseListener
 				quitDialog.setVisible(true);
 			}
 		});
-
+	
 		playButton.addActionListener(new ActionListener()
 		{
 			public void actionPerformed(ActionEvent e)
@@ -1120,9 +1339,9 @@ public class GameOfLife extends JFrame implements MouseListener
 				if(cellCount != 0)
 				{
 					if(!gameStarted) { storeStartFlags(); }
-
+	
 					evolver.start();
-
+	
 					if(forward)
 					{
 						forwardsButton.setEnabled(false);
@@ -1140,7 +1359,7 @@ public class GameOfLife extends JFrame implements MouseListener
 				else
 				{
 					String msg = "Cells must be added before the starting the game...";
-
+	
 					postInfo(msg,true);
 				}
 			}
@@ -1169,7 +1388,7 @@ public class GameOfLife extends JFrame implements MouseListener
 				if(cellCount != 0)
 				{
 					if(!gameStarted) { storeStartFlags(); }
-
+	
 					if(auto)
 					{
 						if(!play)
@@ -1183,9 +1402,9 @@ public class GameOfLife extends JFrame implements MouseListener
 						backwardsButton.setEnabled(true);
 					}
 					else { createNextGeneration(); }
-
+	
 					forward = true;
-
+	
 					// Debug...
 					// System.out.printf("backwardsIndex = "+backwardsIndex+"\n");
 					// System.out.printf("maxBackwardsIndex = "+maxBackwardsIndex+"\n");
@@ -1193,7 +1412,7 @@ public class GameOfLife extends JFrame implements MouseListener
 				else
 				{
 					String msg = "Cells must be added before the starting the game...";
-
+	
 					postInfo(msg,true);
 				}
 			}
@@ -1203,7 +1422,7 @@ public class GameOfLife extends JFrame implements MouseListener
 			public void actionPerformed(ActionEvent e)
 			{
 				if(forward) { backwardsIndex--; }
-
+	
 				if(auto)
 				{
 					if(!play)
@@ -1217,7 +1436,7 @@ public class GameOfLife extends JFrame implements MouseListener
 					backwardsButton.setEnabled(false);
 				}
 				else { createLastGeneration(); }
-
+	
 				// Debug...
 				// System.out.printf("backwardsIndex = "+backwardsIndex+"\n");
 				// System.out.printf("maxBackwardsIndex = "+maxBackwardsIndex+"\n");
@@ -1231,7 +1450,7 @@ public class GameOfLife extends JFrame implements MouseListener
 				{
 					if(!gameStarted) { storeStartFlags(); }
 				}
-
+	
 				if(auto)
 				{
 					evolver.cancel();
@@ -1262,7 +1481,7 @@ public class GameOfLife extends JFrame implements MouseListener
 					}
 					forwardsButton.setEnabled(false);
 					backwardsButton.setEnabled(true);
-
+	
 					modeField.setForeground(Color.magenta);
 					modeField.setText(" Mode = AUTO   ");
 					modeButton.setBackground(Color.magenta);
@@ -1352,7 +1571,17 @@ public class GameOfLife extends JFrame implements MouseListener
 				newDialog.setVisible(true);
 			}
 		});
-
+		saveButton.addActionListener(new ActionListener()
+		{
+			public void actionPerformed(ActionEvent e)
+			{ errorCheckSave(); }
+		});
+		openButton.addActionListener(new ActionListener()
+		{
+			public void actionPerformed(ActionEvent e)
+			{ errorCheckOpen(); }
+		});
+	
 		quitDialogOption[0].addActionListener(new ActionListener()
 		{
 			public void actionPerformed(ActionEvent e)
@@ -1586,32 +1815,35 @@ public class GameOfLife extends JFrame implements MouseListener
 				info.setText("System Preset:\nChoas: 'Acorn'\n");
 			}
 		});
-
+	
 		pack();
 		setVisible(true);
-
-        // Set Panel & JScrollPane on the about window JFrame's Container...
-      	aboutPane = aboutWindow.getContentPane();
-      	aboutPane.add(aboutScrollPane);
-      	aboutTextArea.setText(
+	
+	    // Set Panel & JScrollPane on the about window JFrame's Container...
+	  	aboutPane = aboutWindow.getContentPane();
+	  	aboutPane.add(aboutScrollPane);
+	  	aboutTextArea.setText(
 			 "Author of this Application: Dr Gareth Olubunmi Hughes (14 February 2017 - Present)\n"
 			+"Copyright (c) : Dr Gareth Olubunmi Hughes (14 February 2017 - Present)\n\n"
-
+	
 			+"Gareth Hughes\n"
 			+"Application for the BBC Software Engineering Graduate Trainee Scheme\n"
 			+"Technical Test\n"
 			+"An application to implement the rules of Conway's Game of Life"
 		);
-      	aboutTextArea.setEditable(false);
-      	aboutTextArea.setFocusable(false);
-      	aboutTextArea.setBackground(Color.black);
-      	aboutTextArea.setForeground(Color.green);
-      	aboutTextArea.setFont(font2_mono_b);
-      	aboutTextArea.setBorder( BorderFactory.createEmptyBorder(10,15,15,15) );
-      	aboutWindow.setResizable(false);
-      	aboutWindow.pack();
+	  	aboutTextArea.setEditable(false);
+	  	aboutTextArea.setFocusable(false);
+	  	aboutTextArea.setBackground(Color.black);
+	  	aboutTextArea.setForeground(Color.green);
+	  	aboutTextArea.setFont(font2_mono_b);
+	  	aboutTextArea.setBorder( BorderFactory.createEmptyBorder(10,15,15,15) );
+	  	aboutWindow.setResizable(false);
+	  	aboutWindow.pack();
+	
+		//keyWindow.setLocationRelativeTo(contentPane);
+	  	//keyWindow.setVisible(true);
 	}
-
+	
 	public static void main( String[] args)
 	{
 		SwingUtilities.invokeLater(new Runnable()
@@ -1622,32 +1854,130 @@ public class GameOfLife extends JFrame implements MouseListener
 	}
 }
 
+class ColourKeyWindow extends JFrame
+{
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = 1L;
+
+	// Object Pointers:
+	public GameOfLife game;
+	
+	// Instance Objects:
+	public static Font  font2_mono_b = new Font("Monospaced",Font.BOLD, 14);
+	public static Font  font2_b      = new Font("TimesRoman",Font.BOLD, 14);
+	public static Font  font3_mono_b = new Font("Monospaced",Font.BOLD, 17);
+	public static Font  font3_b      = new Font("TimesRoman",Font.BOLD, 17);
+	public static Font  font4_mono   = new Font("Monospaced",Font.PLAIN,20);
+	public static Font  font4_mono_b = new Font("Monospaced",Font.BOLD ,20);
+	
+	// Instance Components:
+	private Container cPane;
+	private JPanel contentPane = new JPanel();
+	private JScrollPane  cScrollPane = new JScrollPane(contentPane);
+	
+	private JLabel colourLabel = new JLabel("Extended Colour Key:");
+	private JPanel[] colourPanel     = new JPanel[4];
+	private JLabel[] cellTypeLabel   = new JLabel[4];
+	private JTextArea[] cellTypeData = new JTextArea[4];
+	
+	public ColourKeyWindow(GameOfLife g)
+	{
+		super("Conway's Game of Life: Extended Colour Key");
+	
+	    // Set Panel & JScrollPane on the main JFrame's Container...
+	  	cPane = getContentPane();
+	  	cPane.add(cScrollPane);
+	    contentPane.setLayout(new GridBagLayout());
+	    contentPane.setBackground(Color.lightGray);
+	    contentPane.setBorder( BorderFactory.createEmptyBorder(8,15,15,15) );
+
+		// Set constraints and add components:
+		colourLabel.setFont(font4_mono_b);
+		GameOfLife.set_constraints(
+			contentPane, new GridBagConstraints(), colourLabel, 0,0,4,1, new Insets(0,0,35,0)
+		);
+		Color[] colourArray = { Color.white, Color.green, Color.blue, Color.red };
+		String[] cellTypeString = {
+			" = Empty Cell "," = Underpopulated "," = Next Generation "," = Overpopulated "
+		};
+		String[] cellDataString = {
+			 "Colour Name: White\n"
+			+"Java Value:  " + colourArray[0] + "\n"
+			+"Cell Type:   Any empty cell with exactly three live neighbours\n"
+			+"             becomes a live cell, as if by reproduction.",
+			 "Colour Name: Green\n"
+			+"Java Value:  " + colourArray[1] + "\n"
+			+"Cell Type:   Any live cell with fewer than two live neighbours\n"
+			+"             dies, as if caused by underpopulation.",
+			 "Colour Name: Blue\n"
+			+"Java Value:  " + colourArray[2] + "\n"
+			+"Cell Type:   Any live cell with two or three live neighbours\n"
+			+"             lives on to the next generation.",
+			 "Colour Name: Red\n"
+			+"Java Value:  " + colourArray[3] + "\n"
+			+"Cell Type:   Any live cell with more than three live neighbours\n"
+			+"             dies, as if by overpopulation."
+		};
+		for(int i=0; i<4; i++)
+		{
+			colourPanel[i] = new JPanel();
+			colourPanel[i].setBackground(colourArray[i]);
+			colourPanel[i].setPreferredSize(new Dimension(35,35) );
+			colourPanel[i].setBorder( BorderFactory.createMatteBorder(33,0,33,0,Color.lightGray) );
+			GameOfLife.set_constraints( contentPane, new GridBagConstraints(),
+				colourPanel[i], 0,(i+1),1,1, new Insets(2,2,2,2)
+			);
+	
+			cellTypeLabel[i] = new JLabel(cellTypeString[i]);
+			cellTypeLabel[i].setFont(font3_mono_b);
+			GameOfLife.set_constraints( contentPane, new GridBagConstraints(), cellTypeLabel[i], 1,(i+1),1,1 );
+	
+			cellTypeData[i] = new JTextArea(cellDataString[i]);
+			cellTypeData[i].setBackground(Color.black);
+			cellTypeData[i].setForeground(colourArray[i]);
+			cellTypeData[i].setFont(font2_mono_b);
+			cellTypeData[i].setEditable(false);
+			cellTypeData[i].setFocusable(false);
+			cellTypeData[i].setBorder( BorderFactory.createEmptyBorder(10,10,10,10) );
+			GameOfLife.set_constraints(
+				contentPane, new GridBagConstraints(), cellTypeData[i],  2,(i+1),1,1, new Insets(2,0,2,0) );
+		}
+	
+	
+	
+	    setResizable(false);
+	  	pack();
+	}
+}
+
 class Evolver extends Thread
 {
 	private boolean forward;
 	private int stepTime;
-  	private Thread t;
-  	public GameOfLife game;
-
-  	public Evolver(GameOfLife g, double time, boolean f)
-  	{
+		private Thread t;
+		public GameOfLife game;
+	
+		public Evolver(GameOfLife g, double time, boolean f)
+		{
 		game = g;
 		forward = f;
 		setStepTime(time);
 	}
-
+	
 	public void setStepTime(double time)
 	{
 		time = Math.round(time * 10);
 		time /= 10;           // rounds to 1 decimal place
 		time = time * 1000;   // converts seconds to miliseconds
 		stepTime = (int)time; // casts a double to an int
-
+	
 		System.out.printf("Step Time = " + stepTime + "ms\n");
 	}
-
+	
 	public void setDirection(boolean f) { forward = f; }
-
+	
 	public synchronized void start()
 	{
 		if (t == null)
@@ -1656,7 +1986,7 @@ class Evolver extends Thread
 			t.start();
 		}
 	}
-
+	
 	public void cancel()
 	{
 		if (t != null)
@@ -1665,16 +1995,16 @@ class Evolver extends Thread
 			t = null;	   // and stop drawing before destroy() is called
 		}
 	}
-
-  	public synchronized void run()
-  	{
+	
+		public synchronized void run()
+		{
 		try
 		{
 			while (!Thread.currentThread().isInterrupted())
 			{
 				if(forward) { game.createNextGeneration(); }
 				else        { game.createLastGeneration(); }
-				t.sleep(stepTime);
+				Thread.sleep(stepTime);
 			}
 		}
 		catch(InterruptedException e){} // Allows the thread to exit
